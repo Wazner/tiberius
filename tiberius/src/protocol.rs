@@ -435,7 +435,7 @@ impl<'a> SerializeMessage for LoginMessage<'a> {
 
         let mut data_offset = cursor.position() as usize + var_data.len() * 2 * 2 + 6;
 
-        for (i, value) in var_data.into_iter().enumerate() {
+        for (i, value) in var_data.iter().enumerate() {
             // write the client ID (created from the MAC address)
             if i == 9 {
                 cursor.write_u32::<LittleEndian>(0)?; //TODO:

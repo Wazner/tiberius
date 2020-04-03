@@ -98,9 +98,9 @@ impl Time {
     #[inline]
     pub fn len(&self) -> Result<u8> {
         Ok(match self.scale {
-            0...2 => 3,
-            3...4 => 4,
-            5...7 => 5,
+            0..=2 => 3,
+            3..=4 => 4,
+            5..=7 => 5,
             _ => {
                 return Err(Error::Protocol(
                     format!("timen: invalid scale {}", self.scale).into(),
@@ -132,9 +132,9 @@ impl Time {
 
     pub fn decode<R: Read>(mut rd: R, n: usize, len: u8) -> Result<Time> {
         let val = match (n, len) {
-            (0...2, 3) => rd.read_u16::<LittleEndian>()? as u64 | (rd.read_u8()? as u64) << 16,
-            (3...4, 4) => rd.read_u32::<LittleEndian>()? as u64,
-            (5...7, 5) => rd.read_u32::<LittleEndian>()? as u64 | (rd.read_u8()? as u64) << 32,
+            (0..=2, 3) => rd.read_u16::<LittleEndian>()? as u64 | (rd.read_u8()? as u64) << 16,
+            (3..=4, 4) => rd.read_u32::<LittleEndian>()? as u64,
+            (5..=7, 5) => rd.read_u32::<LittleEndian>()? as u64 | (rd.read_u8()? as u64) << 32,
             _ => {
                 return Err(Error::Protocol(
                     format!("timen: invalid length {}", n).into(),
@@ -205,13 +205,13 @@ mod chrono {
             .num_days()
     }
 
-    /// relevant for encoding to datetime1
+    /*/// relevant for encoding to datetime1
     #[inline]
     fn to_sec_fragments(time: &NaiveTime) -> i64 {
         time.signed_duration_since(NaiveTime::from_hms(0, 0, 0))
             .num_nanoseconds()
             .unwrap() * 300 / (1e9 as i64)
-    }
+    }*/
 
     from_column_data!(
         NaiveDateTime:

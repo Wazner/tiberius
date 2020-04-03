@@ -255,7 +255,7 @@ struct Connect<I: BoxableIo, F: Future<Item = I, Error = Error> + Send + Sized> 
 struct SqlConnectionContext<I: BoxableIo> {
     params: ConnectParams,
     transport: TdsTransport<TransportStream<I>>,
-    wauth_client: Option<Box<NextBytes + Send>>,
+    wauth_client: Option<Box<dyn NextBytes + Send>>,
 }
 
 impl<I: BoxableIo> SqlConnectionContext<I> {
@@ -523,7 +523,7 @@ pub trait StmtResult {
     type Io: BoxableIo;
     type Result: Sized;
 
-    fn from_connection(SqlConnection<Self::Io>, oneshot::Sender<SqlConnection<Self::Io>>) -> Self::Result;
+    fn from_connection(connection: SqlConnection<Self::Io>, sender: oneshot::Sender<SqlConnection<Self::Io>>) -> Self::Result;
 }
 
 /// A representation of an authenticated and ready for use SQL connection
@@ -594,7 +594,7 @@ enum ConnectTarget {
 
 impl ConnectTarget {
     fn connect(self) 
-        -> Box<Future<Item = Box<BoxableIo>, Error = Error> + Sync + Send>
+        -> Box<dyn Future<Item = Box<dyn BoxableIo>, Error = Error> + Sync + Send>
     {
         match self {
             ConnectTarget::Tcp(ref addr) => {
@@ -604,7 +604,7 @@ impl ConnectTarget {
                         Ok(stream)
                     })
                     .from_err::<Error>()
-                    .map(|stream| Box::new(stream) as Box<BoxableIo>);
+                    .map(|stream| Box::new(stream) as Box<dyn BoxableIo>);
                 Box::new(future)
             }
             // First resolve the instance to a port via the
@@ -754,30 +754,36 @@ fn parse_connection_str(connection_str: &str) -> Result<(ConnectParams, ConnectT
                 }
             },
             "uid" | "username" | "user" => {
-                connect_params.auth = match connect_params.auth {
-                    AuthMethod::SqlServer(ref mut username, _) |
-                    AuthMethod::WinAuth(ref mut username, _) => {
-                        *username = value.into_owned().into();
-                        continue;
-                    }
-                    #[cfg(windows)]
-                    AuthMethod::SSPI_SSO => {
-                        AuthMethod::WinAuth(value.into_owned().into(), "".into())
-                    }
-                };
+                #[allow(unreachable_code)]
+                {
+                    connect_params.auth = match connect_params.auth {
+                        AuthMethod::SqlServer(ref mut username, _) |
+                        AuthMethod::WinAuth(ref mut username, _) => {
+                            *username = value.into_owned().into();
+                            continue;
+                        }
+                        #[cfg(windows)]
+                        AuthMethod::SSPI_SSO => {
+                            AuthMethod::WinAuth(value.into_owned().into(), "".into())
+                        }
+                    };
+                }
             }
             "password" | "pwd" => {
-                connect_params.auth = match connect_params.auth {
-                    AuthMethod::SqlServer(_, ref mut password) |
-                    AuthMethod::WinAuth(_, ref mut password) => {
-                        *password = value.into_owned().into();
-                        continue;
-                    }
-                    #[cfg(windows)]
-                    AuthMethod::SSPI_SSO => {
-                        AuthMethod::WinAuth("".into(), value.into_owned().into())
-                    }
-                };
+                #[allow(unreachable_code)]
+                {
+                    connect_params.auth = match connect_params.auth {
+                        AuthMethod::SqlServer(_, ref mut password) |
+                        AuthMethod::WinAuth(_, ref mut password) => {
+                            *password = value.into_owned().into();
+                            continue;
+                        }
+                        #[cfg(windows)]
+                        AuthMethod::SSPI_SSO => {
+                            AuthMethod::WinAuth("".into(), value.into_owned().into())
+                        }
+                    };
+                }
             }
             "database" => {
                 connect_params.target_db = Some(value.into_owned().into());
@@ -808,10 +814,10 @@ fn parse_connection_str(connection_str: &str) -> Result<(ConnectParams, ConnectT
     Ok((connect_params, target))
 }
 
-impl SqlConnection<Box<BoxableIo>> {
+impl SqlConnection<Box<dyn BoxableIo>> {
     /// Naive connection function for the SQL client
     pub fn connect(connection_str: &str) 
-        -> Box<Future<Item = SqlConnection<Box<BoxableIo>>, Error=Error> + Send>
+        -> Box<dyn Future<Item = SqlConnection<Box<dyn BoxableIo>>, Error=Error> + Send>
     {
         let future = parse_connection_str(connection_str)
             .into_future()
@@ -890,7 +896,7 @@ impl<I: BoxableIo + Sized + 'static> SqlConnection<I> {
     fn do_prepare_exec<'b>(
         &self,
         stmt: &Statement,
-        params: &'b [&'b ToSql],
+        params: &'b [&'b dyn ToSql],
     ) -> TokenRpcRequest<'b> {
         let mut param_str = String::with_capacity(10 * params.len());
 
@@ -936,7 +942,7 @@ impl<I: BoxableIo + Sized + 'static> SqlConnection<I> {
         }
     }
 
-    fn do_exec<'a>(&self, handle: i32, params: &'a [&'a ToSql]) -> TokenRpcRequest<'a> {
+    fn do_exec<'a>(&self, handle: i32, params: &'a [&'a dyn ToSql]) -> TokenRpcRequest<'a> {
         let mut params_meta = vec![
             RpcParam {
                 // handle (using "handle" here makes RpcProcId::SpExecute not work and requires RpcProcIdValue::NAME, wtf)
@@ -964,7 +970,7 @@ impl<I: BoxableIo + Sized + 'static> SqlConnection<I> {
     fn internal_exec<R: StmtResult<Io = I>>(
         mut self,
         stmt: Statement,
-        params: &[&ToSql],
+        params: &[&dyn ToSql],
     ) -> StmtStream<I, R> {
         // call sp_prepare (with valid handle) or sp_prepexec (initializer)
         let (req, meta) = if let Some((handle, meta)) = stmt.get_handle_for(
@@ -992,7 +998,7 @@ impl<I: BoxableIo + Sized + 'static> SqlConnection<I> {
     pub fn query<S: Into<Statement>>(
         self,
         stmt: S,
-        params: &[&ToSql],
+        params: &[&dyn ToSql],
     ) -> QueryResult<StmtStream<I, QueryStream<I>>> {
         QueryResult::new(self.internal_exec(stmt.into(), params))
     }
@@ -1003,13 +1009,13 @@ impl<I: BoxableIo + Sized + 'static> SqlConnection<I> {
     pub fn exec<S: Into<Statement>>(
         self,
         stmt: S,
-        params: &[&ToSql],
+        params: &[&dyn ToSql],
     ) -> ExecResult<StmtStream<I, ExecFuture<I>>> {
         ExecResult::new(self.internal_exec(stmt.into(), params))
     }
 
     /// Start a transaction
-    pub fn transaction(self) -> Box<Future<Item = Transaction<I>, Error = Error> + Send> {
+    pub fn transaction(self) -> Box<dyn Future<Item = Transaction<I>, Error = Error> + Send> {
         Box::new(
             self.simple_exec("set implicit_transactions on")
                 .and_then(|(result, conn)| {
@@ -1036,8 +1042,8 @@ impl<I: BoxableIo + Sized + 'static> SqlConnection<I> {
 fn _ensure_sync() {
     fn _ensure<T: Send>() {}
     _ensure::<Error>();
-    _ensure::<SqlConnection<Box<BoxableIo>>>();
-    _ensure::<stmt::QueryResult<query::ResultSetStream<Box<BoxableIo>, QueryStream<Box<BoxableIo>>>>>();
+    _ensure::<SqlConnection<Box<dyn BoxableIo>>>();
+    _ensure::<stmt::QueryResult<query::ResultSetStream<Box<dyn BoxableIo>, QueryStream<Box<dyn BoxableIo>>>>>();
 }
 
 #[cfg(test)]

@@ -78,7 +78,7 @@ impl<I: BoxableIo, R: StmtResult<Io = I>> StmtStream<I, R> {
         conn: SqlConnection<I>,
         stmt: Statement,
         meta: Option<Arc<TokenColMetaData>>,
-        params: &[&ToSql],
+        params: &[&dyn ToSql],
     ) -> Self {
         let signature = params.iter().map(|x| x.to_sql()).collect();
         StmtStream {

@@ -149,7 +149,7 @@ impl Collation {
     }
 
     /// return an encoding for a given collation
-    pub fn encoding(&self) -> Option<&'static Encoding> {
+    pub fn encoding(&self) -> Option<&'static dyn Encoding> {
         if self.sort_id == 0 {
             collation::lcid_to_encoding(self.lcid())
         } else {
@@ -754,8 +754,8 @@ to_sql!(
 impl<'a> ToSql for &'a str {
     fn to_sql(&self) -> &'static str {
         match self.len() {
-            0...4000 => "NVARCHAR(4000)",
-            4001...MAX_NVARCHAR_SIZE => "NVARCHAR(MAX)",
+            0..=4000 => "NVARCHAR(4000)",
+            4001..=MAX_NVARCHAR_SIZE => "NVARCHAR(MAX)",
             _ => "NTEXT",
         }
     }
@@ -764,7 +764,7 @@ impl<'a> ToSql for &'a str {
 impl<'a> ToSql for &'a [u8] {
     fn to_sql(&self) -> &'static str {
         match self.len() {
-            0...8000 => "VARBINARY(8000)",
+            0..=8000 => "VARBINARY(8000)",
             _ => "VARBINARY(MAX)"
         }
     }
