@@ -253,11 +253,11 @@ impl TypeInfo {
                 VarLenType::Datetimen |
                 VarLenType::Timen |
                 VarLenType::Datetime2 => trans.inner.read_u8()? as usize,
-                VarLenType::NChar | VarLenType::NVarchar | VarLenType::BigVarChar | VarLenType::BigBinary => {
+                VarLenType::NChar | VarLenType::NVarchar | VarLenType::BigVarChar | VarLenType::BigBinary | VarLenType::BigVarBin => {
                     trans.inner.read_u16::<LittleEndian>()? as usize
                 }
                 VarLenType::Daten => 3,
-                _ => unimplemented!(),
+                _ => unimplemented!("Type {:?} not implemented", ty),
             };
             let collation = match ty {
                 VarLenType::NChar | VarLenType::NVarchar | VarLenType::BigVarChar => Some(Collation {
@@ -476,7 +476,7 @@ impl<'a> ColumnData<'a> {
                         let date = time::Date::new(LittleEndian::read_u32(&bytes));
                         ColumnData::DateTime2(time::DateTime2(date, time))
                     }
-                    VarLenType::BigBinary => {
+                    VarLenType::BigBinary | VarLenType::BigVarBin => {
                         trans.state_tracked = true;
 
                         let mode = ReadTyMode::auto(*len);
@@ -653,10 +653,28 @@ impl<'a> ColumnData<'a> {
             ColumnData::None => {
                 target.write_all(&[FixedLenType::Null as u8])?;
             }
-            ColumnData::Binary(ref buf) => {
-                target.write_u8(VarLenType::BigBinary as u8)?;
+            ColumnData::Binary(ref buf) if buf.len() <= 8000 => {
+                target.write_u8(VarLenType::BigVarBin as u8)?;
+                target.write_u16::<LittleEndian>(8000)?;
                 target.write_u16::<LittleEndian>(buf.len() as u16)?;
                 target.write_all(buf)?;
+            },
+            ColumnData::Binary(ref buf) => {
+                target.write_u8(VarLenType::BigVarBin as u8)?;
+                target.write_u16::<LittleEndian>(0xffff)?;
+                
+                target.write_u64::<LittleEndian>(0xfffffffffffffffe)?;
+                // write PLP chunks
+                {
+                    let mut writer = PLPChunkWriter {
+                        target: &mut target,
+                        buf: Vec::with_capacity(0xffff),
+                    };
+                    writer.write_all(buf)?;
+                    writer.flush()?;
+                }
+                
+                target.write_u32::<LittleEndian>(0)?; //PLP_TERMINATOR
             }
             _ => unimplemented!()
         }
@@ -739,6 +757,15 @@ impl<'a> ToSql for &'a str {
             0...4000 => "NVARCHAR(4000)",
             4001...MAX_NVARCHAR_SIZE => "NVARCHAR(MAX)",
             _ => "NTEXT",
+        }
+    }
+}
+
+impl<'a> ToSql for &'a [u8] {
+    fn to_sql(&self) -> &'static str {
+        match self.len() {
+            0...8000 => "VARBINARY(8000)",
+            _ => "VARBINARY(MAX)"
         }
     }
 }
