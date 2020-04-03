@@ -1009,7 +1009,7 @@ impl<I: BoxableIo + Sized + 'static> SqlConnection<I> {
     }
 
     /// Start a transaction
-    pub fn transaction(self) -> Box<Future<Item = Transaction<I>, Error = Error>> {
+    pub fn transaction(self) -> Box<Future<Item = Transaction<I>, Error = Error> + Send> {
         Box::new(
             self.simple_exec("set implicit_transactions on")
                 .and_then(|(result, conn)| {
