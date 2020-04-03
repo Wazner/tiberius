@@ -167,7 +167,7 @@ impl<I: BoxableIo> Stream for QueryStream<I> {
     }
 }
 
-impl<'a, I: BoxableIo> StmtResult for QueryStream<I> {
+impl<I: BoxableIo> StmtResult for QueryStream<I> {
     type Io = I;
     type Result = QueryStream<I>;
 
