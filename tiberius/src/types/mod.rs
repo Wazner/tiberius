@@ -692,7 +692,7 @@ pub trait ToColumnData {
 
 /// a type which can be translated as an SQL type (e.g. nvarchar) and is serializable (as `ColumnData`)
 /// e.g. for usage within a ROW token
-pub trait ToSql: ToColumnData {
+pub trait ToSql: ToColumnData + Send + Sync {
     fn to_sql(&self) -> &'static str;
     fn to_sql_null() -> &'static str where Self: Sized  { "int" }
 }

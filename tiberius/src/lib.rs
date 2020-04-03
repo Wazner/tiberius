@@ -519,10 +519,11 @@ impl<I: BoxableIo, F: Future<Item = I, Error = Error> + Send> Future for Connect
 }
 
 /// A type which is constructable from a statement as a statement's result
-pub trait StmtResult<I: BoxableIo> {
+pub trait StmtResult {
+    type Io: BoxableIo;
     type Result: Sized;
 
-    fn from_connection(SqlConnection<I>, oneshot::Sender<SqlConnection<I>>) -> Self::Result;
+    fn from_connection(SqlConnection<Self::Io>, oneshot::Sender<SqlConnection<Self::Io>>) -> Self::Result;
 }
 
 /// A representation of an authenticated and ready for use SQL connection
@@ -844,7 +845,7 @@ impl<I: BoxableIo + Sized + 'static> SqlConnection<I> {
         Ok(())
     }
 
-    fn simple_exec_internal<'a, Q, R: StmtResult<I>>(mut self, query: Q) -> ResultSetStream<I, R>
+    fn simple_exec_internal<'a, Q, R: StmtResult<Io = I>>(mut self, query: Q) -> ResultSetStream<I, R>
     where
         Q: Into<Cow<'a, str>>,
     {
@@ -960,7 +961,7 @@ impl<I: BoxableIo + Sized + 'static> SqlConnection<I> {
         }
     }
 
-    fn internal_exec<R: StmtResult<I>>(
+    fn internal_exec<R: StmtResult<Io = I>>(
         mut self,
         stmt: Statement,
         params: &[&ToSql],

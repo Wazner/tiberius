@@ -9,7 +9,7 @@ use {BoxableIo, SqlConnection, StmtResult, Error, Result};
 
 /// A query result consists of multiple query streams (amount of executed queries = amount of results)
 #[must_use = "streams do nothing unless polled"]
-pub struct ResultSetStream<I: BoxableIo, R: StmtResult<I>> {
+pub struct ResultSetStream<I: BoxableIo, R: StmtResult<Io = I>> {
     err: Option<Error>,
     conn: Option<SqlConnection<I>>,
     receiver: Option<oneshot::Receiver<SqlConnection<I>>>,
@@ -19,7 +19,7 @@ pub struct ResultSetStream<I: BoxableIo, R: StmtResult<I>> {
     _marker: PhantomData<R>,
 }
 
-impl<I: BoxableIo, R: StmtResult<I>> ResultSetStream<I, R> {
+impl<I: BoxableIo, R: StmtResult<Io = I>> ResultSetStream<I, R> {
     pub fn new(conn: SqlConnection<I>) -> ResultSetStream<I, R> {
         ResultSetStream {
             err: None,
@@ -37,7 +37,7 @@ impl<I: BoxableIo, R: StmtResult<I>> ResultSetStream<I, R> {
     }
 }
 
-impl<I: BoxableIo, R: StmtResult<I>> StateStream for ResultSetStream<I, R> {
+impl<I: BoxableIo, R: StmtResult<Io = I>> StateStream for ResultSetStream<I, R> {
     type Item = R::Result;
     type State = SqlConnection<I>;
     type Error = Error;
@@ -136,7 +136,7 @@ impl<I: BoxableIo> Drop for ResultInner<I> {
     }
 }
 
-impl<'a, I: BoxableIo> Stream for QueryStream<I> {
+impl<I: BoxableIo> Stream for QueryStream<I> {
     type Item = QueryRow;
     type Error = Error;
 
@@ -167,7 +167,8 @@ impl<'a, I: BoxableIo> Stream for QueryStream<I> {
     }
 }
 
-impl<'a, I: BoxableIo> StmtResult<I> for QueryStream<I> {
+impl<'a, I: BoxableIo> StmtResult for QueryStream<I> {
+    type Io = I;
     type Result = QueryStream<I>;
 
     fn from_connection(conn: SqlConnection<I>, ret_conn: oneshot::Sender<SqlConnection<I>>) -> QueryStream<I> {
@@ -238,7 +239,8 @@ impl<I: BoxableIo> Future for ExecFuture<I> {
     }
 }
 
-impl<I: BoxableIo> StmtResult<I> for ExecFuture<I> {
+impl<I: BoxableIo> StmtResult for ExecFuture<I> {
+    type Io = I;
     type Result = ExecFuture<I>;
 
     fn from_connection(

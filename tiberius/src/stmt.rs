@@ -57,7 +57,7 @@ where
 /// A future which handles the execution of a prepared statement and translates it
 /// into a set of results (e.g. multiple elements of the type `QueryStream`)
 #[must_use = "streams do nothing unless polled"]
-pub struct StmtStream<I: BoxableIo, R: StmtResult<I>> {
+pub struct StmtStream<I: BoxableIo, R: StmtResult<Io = I>> {
     err: Option<Error>,
     done: bool,
     conn: Option<SqlConnection<I>>,
@@ -73,7 +73,7 @@ pub struct StmtStream<I: BoxableIo, R: StmtResult<I>> {
     _marker: PhantomData<*const R>,
 }
 
-impl<I: BoxableIo, R: StmtResult<I>> StmtStream<I, R> {
+impl<I: BoxableIo, R: StmtResult<Io = I>> StmtStream<I, R> {
     pub(crate) fn new(
         conn: SqlConnection<I>,
         stmt: Statement,
@@ -100,7 +100,7 @@ impl<I: BoxableIo, R: StmtResult<I>> StmtStream<I, R> {
     }
 }
 
-impl<I: BoxableIo, R: StmtResult<I>> StateStream for StmtStream<I, R> {
+impl<I: BoxableIo, R: StmtResult<Io = I>> StateStream for StmtStream<I, R> {
     type Item = R::Result;
     type State = SqlConnection<I>;
     type Error = Error;
